@@ -1,0 +1,18 @@
+[project]
+name = "pier2"
+version = "0.1.0"
+description = "Because all you touch and all you see is all your life will ever be."
+authors = [
+    {name = "Pink Floyd"}
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi (>=0.115.8,<0.116.0)",
+    "uvicorn (>=0.34.0,<0.35.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

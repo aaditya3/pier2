@@ -4,14 +4,14 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Customers
-from ..schemas import AddCustomer, Customer
+from ..schemas import NewCustomer, Customer
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/customers", tags=["customers"])
 
 @router.post("/", response_model=Customer)
-def add_customer(customer: AddCustomer, db: Session = Depends(get_db)):
+def add_customer(customer: NewCustomer, db: Session = Depends(get_db)):
     db_customer = Customers(**customer.dict())
     db.add(db_customer)
     db.commit()

@@ -39,14 +39,23 @@ def client_fixture(session: Session):
 
 def test_add_customer(client: TestClient):
 
-    # FIXME: Assumes empty db. Once all tests are written may need fix.
     resp = client.get(f'/customers/1')
     assert resp.status_code == 404
 
     resp = client.post(f'/customers', json = {'email': "pink@floyd.com"})
     assert resp.status_code == 422
     result = json.loads(resp.text)
-    print(f"Recieved from server after post: {result}")
+    print(f"** Recieved from server after post: {result}")
+
+    customer_data = {
+        'email': "pinkfloyd.com",
+        'first_name': "Pink",
+        'last_name': "Floyd"
+    }
+    resp = client.post(f'/customers', json = customer_data)
+    assert resp.status_code == 422, resp.content
+    result = json.loads(resp.text)
+    print(f"** Recieved from server after post: {result}")
 
     customer_data = {
         'email': "pink@floyd.com",
@@ -56,12 +65,12 @@ def test_add_customer(client: TestClient):
     resp = client.post(f'/customers', json = customer_data)
     assert resp.status_code == 200, resp.content
     result = json.loads(resp.text)
-    print(f"Recieved from server after post: {result}")
+    print(f"** Recieved from server after post: {result}")
 
     resp = client.get(f'/customers/{result['customer_id']}')
     assert resp.status_code == 200
     result = json.loads(resp.text)
-    print(f"Recieved from server after create: {result}")
+    print(f"** Recieved from server after create: {result}")
 
 
 

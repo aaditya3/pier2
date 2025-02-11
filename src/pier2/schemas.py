@@ -92,7 +92,7 @@ class NewCustomerAddress(BaseModel):
     address_line_2: Optional[str] = None
     city: str
     state: str
-
+    _state_validator = validator("state")(validate_state)
     zip_code: str
     _zip_validator: validator("zip_code")(validate_zip)
 
@@ -208,7 +208,6 @@ class NewOrderItem(BaseModel):
         return self
 
 
-# FIXME: How to check that the billing address i is one that has is billing set to true.
 class NewOrder(BaseModel):
     customer_id: int
     time_of_order: datetime.datetime

@@ -42,19 +42,19 @@ def _random_datetime(lookback_years = 2):
 def add_store(client):
     resp = client.post(f'/stores', json = {})
     result = json.loads(resp.text)
-    print("Added store:", result['store_id'])
+    #print("Added store:", result['store_id'])
     return result['store_id']
 
 def add_warehouse(client):
     resp = client.post(f'/warehouses', json = {})
     result = json.loads(resp.text)
-    print("Added warehouse:", result['warehouse_id'])
+    #print("Added warehouse:", result['warehouse_id'])
     return result['warehouse_id']
 
 def add_item(client):
     resp = client.post(f'/items', json = {})
     result = json.loads(resp.text)
-    print("Added item:", result['item_id'])
+    # print("Added item:", result['item_id'])
     return result['item_id']
 
 def get_customers_df(count):
@@ -86,7 +86,7 @@ def get_customer_addresses_df(customer_ids, min_addresses = 1, max_addresses = 8
     for cid in customer_ids:
         num_addresses = np.random.randint(1, max_addresses + 1)
         num_unique_zips = round(math.log(num_addresses + 1, 2))
-        zips = list(set(np.random.randint(10000, 100000, num_unique_zips * 10)))[0:num_unique_zips] # ok if fewer
+        zips = [str(x) for x in list(set(np.random.randint(10000, 100000, num_unique_zips * 10)))[0:num_unique_zips]] # ok if fewer
 
         cd = copy.deepcopy(customer_data)
         cd['customer_address_id'] = len(data) + 1
@@ -112,16 +112,15 @@ def get_customer_addresses_df(customer_ids, min_addresses = 1, max_addresses = 8
 def get_orders_df(
         customers_df,
         customer_addresses_df,
+        item_ids,
+        store_ids,
+        warehouse_ids,
         min_items = 1,
         max_items = 10,
         min_orders = 1,
         max_orders = 20,
         min_qty = 1,
         max_qty = 10):
-
-    item_ids = list(range(1, max_items * 10))
-    store_ids = list(range(1, 6))
-    warehouse_ids = list(range(1, 6))
 
     merged = customers_df.merge(customer_addresses_df, on = 'customer_id')
     orders = []
@@ -158,81 +157,95 @@ def get_orders_df(
                     }
 
                 match d['fulfillment_modality']:
-                    case FulfillmentModality.store_inventory:
-                        d['source_store_id']: int(np.random.choice(store_ids))
-                    case FulfillmentModality.store_to_home:
-                        d['source_store_id']: int(np.random.choice(store_ids))
-                        d['dest_customer_address_id']: int(np.random.choice(shipping_ad_ids))
-                    case FulfillmentModality.ware_to_home:
-                        d['source_warehouse_id']: int(np.random.choice(warehouse_ids))
-                        d['dest_customer_address_id']: int(np.random.choice(shipping_ad_ids))
-                    case FulfillmentModality.ware_to_store:
-                        d['source_warehouse_id']: int(np.random.choice(warehouse_ids))
-                        d['dest_store_id']: int(np.random.choice(store_ids))
+                    case FulfillmentModality.store_inventory.value:
+                        d['source_store_id'] = int(np.random.choice(store_ids))
+                    case FulfillmentModality.store_to_home.value:
+                        d['source_store_id'] = int(np.random.choice(store_ids))
+                        d['dest_customer_address_id'] = int(np.random.choice(shipping_ad_ids))
+                    case FulfillmentModality.ware_to_home.value:
+                        d['source_warehouse_id'] = int(np.random.choice(warehouse_ids))
+                        d['dest_customer_address_id'] = int(np.random.choice(shipping_ad_ids))
+                    case FulfillmentModality.ware_to_store.value:
+                        d['source_warehouse_id'] = int(np.random.choice(warehouse_ids))
+                        d['dest_store_id'] = int(np.random.choice(store_ids))
+                    case _:
+                        raise ValueError(f"Internal error. Could not match any fulfillment modality for {d['fulfillment_modality']}")
                 order_items.append(d)
 
             orders.append(order_data)
-
     return pd.DataFrame(orders), pd.DataFrame(order_items)
 
-def add_customer(client, email = "pink@floyd.com"):
-    customer_data = {
-        'email': email,
-        'first_name': "Pink",
-        'last_name': "Floyd"
-    }
-    resp = client.post(f'/customers', json = customer_data)
-    result = json.loads(resp.text)
-    print("Added customer:", result['customer_id'])
-    return result['customer_id']
+def add_all(client, customers = None, customer_addresses = None, orders = None, order_items = None):
+    
+    if (orders is not None and order_items is None) or (orders is None and order_items is not None):
+        raise ValueError("Both orders and order_items must be provided or none.")
+    
+    
+    if customers is not None:
+        for index, row in customers.iterrows():
+            add_customer(client, row.to_dict())
+    
+    if customer_addresses is not None:
+        for index, row in customer_addresses.iterrows():
+            add_customer_address(client, row.to_dict())
+    
+    if orders is not None:
+        for index, row in orders.iterrows():
+            order_id = row.order_id
+            order_data = row.to_dict()
+            items = []
+            for index, r in order_items.query(f'order_id == {order_id}').iterrows():
+                
+                item_data = r.to_dict()
+                # Fix for pandas converting int's to nan's due to nulls allowed in the following
+                for k in ['source_warehouse_id', 'source_store_id', 'dest_store_id', 'dest_customer_address_id']:
+                    if item_data[k] is not None:
+                        if math.isnan(item_data[k]):
+                            item_data.pop(k)
+                        else:
+                            item_data[k] = int(item_data[k])
+                items.append(item_data)
+                        
+            add_order(client, order_data, items)
+    
+
+def add_customer(client, data):
+    resp = client.post(f'/customers', json = data)
+    if resp.status_code == 200:
+        result = json.loads(resp.text)
+        # print("Added customer:", result['customer_id'])
+        return result['customer_id']
+    else:
+        print(resp.text)
+        raise ValueError(f"Could not add new customer. {json.loads(resp.text)}")
 
 
-def add_customer_address(client, customer_id):
-    customer_data = {
-        'customer_id': customer_id,
-        'address_line_1': '34 Haight',
-        'city': 'San Francisco',
-        'state': 'CA',
-        'zip_code': "94131",
-        'is_billing': True,
-        'is_shipping': True
-    }
-
-    resp = client.post(f'/customers/addresses', json = customer_data)
-    result = json.loads(resp.text)
-    print("Added customer address:", result['customer_address_id'])
-    return result['customer_address_id']
+def add_customer_address(client, data):
+    resp = client.post(f'/customers/addresses', json = data)
+    if resp.status_code == 200:
+        result = json.loads(resp.text)
+        # print("Added customer address:", result['customer_address_id'])
+        return result['customer_address_id']
+    else:
+        print(resp.text)
+        raise ValueError(f"Could not add new customer. {json.loads(resp.text)}")
 
 
-def add_order(client, customer_id, customer_address_id, item_id):
-    items = [
-        {'item_id': item_id,
-            'fulfillment_modality': FulfillmentModality.store_to_home.value,
-            'quantity': 3,
-            'price_per_item': 3.2,
-            'source_store_id': 1,
-            'dest_customer_address_id': customer_address_id
-        }
-    ]
-
-    order_data = {
-        'customer_id': customer_id,
-        'time_of_order': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'source': OrderSource.online.value,
-        'billing_address_id': customer_address_id
-    }
-
+def add_order(client, order, items): 
+    
     data = {
         'items' : items,
-        'order': order_data
+        'order': order
     }
 
-
     resp = client.post(f'/orders', json = data)
-    result = json.loads(resp.text)
-    print(result)
-    print("Added order:", result['order_id'])
-    return result['order_id']
+    if resp.status_code == 200:
+        result = json.loads(resp.text)
+        # print("Added order:", result['order_id'])
+        return result['order_id']
+    else:
+        print(resp.text)
+        raise ValueError(f"Could not add new customer. {json.loads(resp.text)}")
 
 
 @pytest.fixture(name="session")
@@ -281,7 +294,7 @@ def test_neg_create_order_non_billing_address():
 
 def test_add_customer(client: TestClient):
 
-    # Check empty db
+    # Negative test
     resp = client.get(f'/customers/123456789')
     assert resp.status_code == 404
 
@@ -297,9 +310,40 @@ def test_add_customer(client: TestClient):
         'first_name': "Pink",
         'last_name': "Floyd"
     }
+    resp = client.post(f'/customers', json = customer_data)
+    assert resp.status_code == 422, resp.content
+    result = json.loads(resp.text)
+    print(f"** Recieved from server after post: {result}")
 
-    # FIXME: Add check fo empty first and last name
+    # Check bad first name
+    customer_data = {
+        'email': "pinkfloyd.com",
+        'first_name': " ",
+        'last_name': "Floyd"
+    }
+    resp = client.post(f'/customers', json = customer_data)
+    assert resp.status_code == 422, resp.content
+    result = json.loads(resp.text)
+    print(f"** Recieved from server after post: {result}")
+    
+    # Check bad last name
+    customer_data = {
+        'email': "pinkfloyd.com",
+        'first_name': "Pink",
+        'last_name': "   "
+    }
+    resp = client.post(f'/customers', json = customer_data)
+    assert resp.status_code == 422, resp.content
+    result = json.loads(resp.text)
+    print(f"** Recieved from server after post: {result}")
 
+    # Check bad phone
+    customer_data = {
+        'email': "pinkfloyd.com",
+        'first_name': "Pink",
+        'last_name': "Floyd",
+        'phone': '434324'
+    }
     resp = client.post(f'/customers', json = customer_data)
     assert resp.status_code == 422, resp.content
     result = json.loads(resp.text)
@@ -308,7 +352,8 @@ def test_add_customer(client: TestClient):
     customer_data = {
         "email": "pink@floyd.com",
         "first_name": "Pink",
-        "last_name": "Floyd"
+        "last_name": "Floyd",
+        "phone": "111-222-4444"
     }
     resp = client.post(f'/customers', json = customer_data)
     assert resp.status_code == 200, resp.content
@@ -321,8 +366,13 @@ def test_add_customer(client: TestClient):
     print(f"** Recieved from server after create: {result}")
 
 def test_add_customer_address(client: TestClient):
-
-    customer_id = add_customer(client)
+    data = {
+        "email": "pink@floyd.com",
+        "first_name": "Pink",
+        "last_name": "Floyd",
+        "phone": "111-222-4444"
+    }
+    customer_id = add_customer(client, data)
 
     ## Customer address test
     customer_data = {
@@ -332,7 +382,6 @@ def test_add_customer_address(client: TestClient):
         'state': 'CA',
         'zip_code': "94131",
         'is_billing': False
-
     }
 
     resp = client.post(f'/customers/addresses', json = customer_data)
@@ -358,8 +407,22 @@ def test_add_order(client: TestClient):
     add_store(client)
     add_warehouse(client)
     item_id = add_item(client)
-    customer_id = add_customer(client)
-    customer_address_id = add_customer_address(client, customer_id)
+    data = {
+        "email": "pink@floyd.com",
+        "first_name": "Pink",
+        "last_name": "Floyd",
+        "phone": "111-222-4444"
+    }
+    customer_id = add_customer(client, data)
+    data = {
+        'customer_id': customer_id,
+        'address_line_1': '34 Haight',
+        'city': 'San Francisco',
+        'state': 'CA',
+        'zip_code': "94131",
+        'is_billing': True
+    }
+    customer_address_id = add_customer_address(client, data)
 
     items = [
         {'item_id': item_id,
@@ -389,82 +452,100 @@ def test_add_order(client: TestClient):
     print(f"** Recieved from server after post: {result}")
 
 def test_order_history_query(client: TestClient):
-    email = "a@b.com"
 
-    add_store(client)
-    add_warehouse(client)
-    item_id = add_item(client)
-    customer_id = add_customer(client, email)
-    customer_address_id = add_customer_address(client, customer_id)
-    for i in range(5):
-        order_id = add_order(client, customer_id, customer_address_id, item_id)
+    customers = get_customers_df(2)
+    customer_addresses = get_customer_addresses_df(list(customers.customer_id))
+    item_ids = [add_item(client) for i in range(1, 101)]
+    store_ids = [add_store(client) for i in range(1, 6)]
+    warehouse_ids = [add_warehouse(client) for i in range(1, 6)]
+    orders, order_items = get_orders_df(customers, customer_addresses, item_ids, store_ids, warehouse_ids)
+
+    add_all(client, customers, customer_addresses, orders, order_items)
+
+    for index, row in customers.iterrows():    
+        data = {'email': row['email']}
+        customer_id = row['customer_id']
+        resp = client.get(f'/query/order_history', params = data)
+        result = json.loads(resp.text)
+        assert resp.status_code == 200, resp.content
+
+        # check against pandas result
+        pandas_orders = set(orders.merge(customers.query(f'customer_id == {customer_id}'))['order_id'])
+        response_orders = set(pd.DataFrame(result)['order_id'])
+        assert pandas_orders == response_orders, f"Pandas result: {pandas_orders}, response result: {response_orders}"
 
 
-    data = {'email': email}
 
-    resp = client.get(f'/query/order_history', params = data)
+def test_group_by_billing_zip(client: TestClient, session: Session):
+    customers = get_customers_df(3)
+    customer_addresses = get_customer_addresses_df(list(customers.customer_id))
+    item_ids = [add_item(client) for i in range(1, 101)]
+    store_ids = [add_store(client) for i in range(1, 6)]
+    warehouse_ids = [add_warehouse(client) for i in range(1, 6)]
+    orders, order_items = get_orders_df(customers, customer_addresses, item_ids, store_ids, warehouse_ids)
+
+    add_all(client, customers, customer_addresses, orders, order_items)
+
+    resp = client.get(f'/query/count_billing_orders')
     result = json.loads(resp.text)
     assert resp.status_code == 200, resp.content
 
-    print("** Recieved from server after post:")
-    _print_json(result)
+    # check against pandas result
+    all_orders = pd.read_sql( "SELECT * FROM orders", session.bind) 
+    all_customer_addresses = pd.read_sql( "SELECT * FROM customer_addresses", session.bind) 
+    pandas_result = all_orders.merge(all_customer_addresses, 
+                                     left_on = 'billing_address_id', 
+                                     right_on = 'customer_address_id').groupby(
+                                         'zip_code').size()
+    assert pandas_result.to_dict() == result
 
 
-def test_group_by_billing_zip(client: TestClient):
-    email = "a@b.com"
 
-    add_store(client)
-    add_warehouse(client)
-    item_id = add_item(client)
-    customer_id = add_customer(client, email)
-    customer_address_id = add_customer_address(client, customer_id)
-    for i in range(5):
-        order_id = add_order(client, customer_id, customer_address_id, item_id)
+def test_group_by_shipping_zip(client: TestClient, session: Session):
+    customers = get_customers_df(3)
+    customer_addresses = get_customer_addresses_df(list(customers.customer_id))
+    item_ids = [add_item(client) for i in range(1, 101)]
+    store_ids = [add_store(client) for i in range(1, 6)]
+    warehouse_ids = [add_warehouse(client) for i in range(1, 6)]
+    orders, order_items = get_orders_df(customers, customer_addresses, item_ids, store_ids, warehouse_ids)
 
+    add_all(client, customers, customer_addresses, orders, order_items)
 
-    resp = client.get('/query/count_billing_orders')
+    # many rows already added, wont be adding more here.
+    resp = client.get(f'/query/count_by_shipping_zip')
     result = json.loads(resp.text)
     assert resp.status_code == 200, resp.content
 
-    print("** Recieved from server after post:")
-    _print_json(result)
+    # check against pandas result
+    customer_addresses = pd.read_sql( "SELECT * FROM customer_addresses", session.bind) 
+    
+    order_items_shipped_home = pd.read_sql(
+        "SELECT * FROM order_items", 
+        session.bind) 
+    pandas_result = order_items_shipped_home.merge(customer_addresses, 
+                                   left_on = 'dest_customer_address_id', 
+                                   right_on = 'customer_address_id').groupby('zip_code')['order_id'].nunique()
+    assert pandas_result.to_dict() == result
 
 
-def test_group_by_shipping_zip(client: TestClient):
-    email = "a@b.com"
+def test_instore_shoppers(client: TestClient, session: Session):
+    customers = get_customers_df(10)
+    customer_addresses = get_customer_addresses_df(list(customers.customer_id))
+    item_ids = [add_item(client) for i in range(1, 101)]
+    store_ids = [add_store(client) for i in range(1, 6)]
+    warehouse_ids = [add_warehouse(client) for i in range(1, 6)]
+    orders, order_items = get_orders_df(customers, customer_addresses, item_ids, store_ids, warehouse_ids)
 
-    add_store(client)
-    add_warehouse(client)
-    item_id = add_item(client)
-    customer_id = add_customer(client, email)
-    customer_address_id = add_customer_address(client, customer_id)
-    for i in range(5):
-        order_id = add_order(client, customer_id, customer_address_id, item_id)
+    add_all(client, customers, customer_addresses, orders, order_items)
 
-
-    resp = client.get('/query/count_by_shipping_zip')
+    # many rows already added, wont be adding more here.
+    resp = client.get(f'/query/instore_shoppers')
     result = json.loads(resp.text)
     assert resp.status_code == 200, resp.content
 
-    print("** Recieved from server after post:")
-    _print_json(result)
+    # check against pandas result
+    orders = pd.read_sql( "SELECT * FROM orders", session.bind) 
+    pandas_result = orders[orders['source'] == 'store'].groupby('customer_id').size().reset_index(
+        name = "count").sort_values("count", ascending=False).head(5)
 
-
-def test_instore_shoppers(client: TestClient):
-    email = "a@b.com"
-
-    add_store(client)
-    add_warehouse(client)
-    item_id = add_item(client)
-    customer_id = add_customer(client, email)
-    customer_address_id = add_customer_address(client, customer_id)
-    for i in range(5):
-        order_id = add_order(client, customer_id, customer_address_id, item_id)
-
-
-    resp = client.get('/query/instore_shoppers')
-    result = json.loads(resp.text)
-    assert resp.status_code == 200, resp.content
-
-    print("** Recieved from server after post:")
-    _print_json(result)
+    assert {str(row['customer_id']): int(row['count']) for _, row in pandas_result.iterrows()} == result

@@ -503,6 +503,9 @@ def test_group_by_billing_zip(client: TestClient, session: Session):
     warehouse_ids = [add_warehouse(client) for i in range(1, 6)]
     orders, order_items = get_orders_df(customers, customer_addresses, item_ids, store_ids, warehouse_ids)
 
+    assert(len(orders) > 0)
+    assert(len(customers) > 0)
+    assert(len(order_items) > 0)
     add_all(client, customers, customer_addresses, orders, order_items)
 
     resp = client.get(f'/query/count_billing_orders')
@@ -511,7 +514,9 @@ def test_group_by_billing_zip(client: TestClient, session: Session):
 
     # check against pandas result
     all_orders = pd.read_sql( "SELECT * FROM orders", session.bind)
+    assert(len(all_orders) > 0)
     all_customer_addresses = pd.read_sql( "SELECT * FROM customer_addresses", session.bind)
+    assert(len(all_customer_addresses) > 0)
     pandas_result = all_orders.merge(all_customer_addresses,
                                      left_on = 'billing_address_id',
                                      right_on = 'customer_address_id').groupby(

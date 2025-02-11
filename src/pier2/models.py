@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Identity, Enum as SQLEnum, DateTime, Integer, String, Float, Boolean, ForeignKey
+from sqlalchemy import Column, Identity, Enum as SQLEnum, DateTime, Integer, String, Float, Boolean, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -15,8 +15,6 @@ class OrderSource(enum.Enum):
     store = 1
     online = 2
 
-# FIXME: nullable is true by efault. index is False by default.
-# which are unique?
 class Customers(Base):
     __tablename__ = "customers"
 
@@ -45,6 +43,7 @@ class CustomerAddresess(Base):
     customer = relationship("Customers", back_populates="addresses")
 
 
+
 class Orders(Base):
     __tablename__ = "orders"
 
@@ -54,9 +53,10 @@ class Orders(Base):
     source = Column(SQLEnum(OrderSource), nullable = False)
     billing_address_id = Column(Integer, ForeignKey('customer_addresses.customer_address_id'), nullable = False)
 
+    billing_address = relationship("CustomerAddresess", foreign_keys=[billing_address_id])
     items = relationship("OrderItems", back_populates="order")
 
-# FIXME: Consider adding a unique constraint where it would make sense.
+
 class OrderItems(Base):
 
     __tablename__ = "order_items"
@@ -78,11 +78,22 @@ class OrderItems(Base):
 
     order = relationship("Orders", back_populates="items")
 
+    __table_args__ = (
+        UniqueConstraint('order_id',
+                         'item_id',
+                         'source_warehouse_id',
+                         'source_store_id',
+                         'dest_store_id',
+                         'dest_customer_address_id',
+                         name='_unique_item_src_dest'),
+    )
+
 
 class Stores(Base):
     __tablename__ = "stores"
 
     store_id = Column(Integer, Identity(), primary_key = True, index = True)
+
 
 class Warehouses(Base):
     __tablename__ = "warehouses"

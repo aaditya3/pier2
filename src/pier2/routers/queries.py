@@ -42,13 +42,12 @@ def get_count_billing_orders(db: Session = Depends(get_db)):
     results = db.query(CustomerAddresess.zip_code, func.count()).join(
         Orders, Orders.billing_address_id == CustomerAddresess.customer_address_id).group_by(
             CustomerAddresess.zip_code).order_by(func.count().desc()).all()
-
-    return [r.to_dict() for r in results]
+    return {r[0]: r[1] for r in results}
 
 
 
 @router.get("/count_by_shipping_zip")
-def get_count_by_shipping_zi(db: Session = Depends(get_db)):
+def get_count_by_shipping_zip(db: Session = Depends(get_db)):
 
     valid_fulfillment_modalities = [FulfillmentModality.store_to_home, FulfillmentModality.ware_to_home]
 
@@ -61,7 +60,7 @@ def get_count_by_shipping_zi(db: Session = Depends(get_db)):
 
 
 @router.get("/instore_shoppers")
-def get_count_by_shipping_zi(top_k: int = 5, db: Session = Depends(get_db)):
+def get_count_by_shipping_zip(top_k: int = 5, db: Session = Depends(get_db)):
     results = db.query(Orders.customer_id, func.count()).filter(Orders.source == OrderSource.store).group_by(
         Orders.customer_id).order_by(func.count().desc()).limit(top_k).all()
     return [r.to_dict() for r in results]

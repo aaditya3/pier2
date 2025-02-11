@@ -42,6 +42,12 @@ def validate_state(state: str) -> str:
 
     return upper_state
 
+def validate_name(name: str) -> str:
+    if len(name.strip()) == 0:
+        raise ValueError(f"Invalid name as it was empty.")
+    return name
+
+
 # FIXME: Obviously need to check zipcode beyond just format.
 def validate_zip(zip: str) -> str:
 
@@ -64,6 +70,8 @@ class NewCustomer(BaseModel):
     _email_validator = validator("email")(validate_email)
     first_name: str
     last_name: str
+    _first_name_validator = validator("first_name")(validate_name)
+    _last_name_validator = validator("last_name")(validate_name)
     phone: Optional[str] = None
     _phone_validator = validator("phone")(validate_phone_number)
 
@@ -76,10 +84,11 @@ class CustomerAddress(BaseModel):
     zip_code: str
     is_billing: Optional[bool]
     is_shipping: Optional[bool]
+    customer_id: int
 
 class NewCustomerAddress(BaseModel):
-
-    address_line_1: str    #FIXME consider some kind of validation here.
+    customer_id: int
+    address_line_1: str
     address_line_2: Optional[str] = None
     city: str
     state: str
@@ -116,6 +125,20 @@ class Item(BaseModel):
     item_id: int
 
 
+class OrderItem(BaseModel):
+    order_item_id: int
+    order_id: int
+    item_id: int
+    fulfillment_modality: FulfillmentModality
+    quantity: int
+    price_per_item: float
+
+    source_warehouse_id: Optional[int] = None
+    source_store_id: Optional[int] = None
+    dest_store_id: Optional[int] = None
+    dest_customer_address_id: Optional[int] = None
+
+    
 class NewOrderItem(BaseModel):
 
     item_id: int
@@ -131,7 +154,7 @@ class NewOrderItem(BaseModel):
     @model_validator(mode='after')
     def validate_datetime(self) -> Self:
         """
-            Only 1 of source and one of dest. should be set.
+            Only 1 each of source and one of dest. should be set.
 
             fulfillment_modality is actually redundant as that information is implicitly
             available in the source/dest id's. But in this case being explicit
@@ -158,6 +181,7 @@ class NewOrderItem(BaseModel):
                 if fulfillment_modality == FulfillmentModality.ware_to_store:
                     if dest_store_id is None:
                         raise ValueError(f"dest_store_id must be input when FulfillmentModality is {fulfillment_modality}")
+                    
                     if source_store_id or dest_customer_address_id:
                         raise ValueError(f"Cannot supply source_store_id {source_store_id} or dest_customer_address_id {dest_customer_address_id} when {fulfillment_modality}.")
 
@@ -184,10 +208,12 @@ class NewOrderItem(BaseModel):
         return self
 
 
+# FIXME: How to check that the billing address i is one that has is billing set to true.
 class NewOrder(BaseModel):
     customer_id: int
     time_of_order: datetime.datetime
     source: OrderSource
+    billing_address_id: int
 
     @model_validator(mode='after')
     def validate_datetime(self) -> Self:
@@ -197,25 +223,20 @@ class NewOrder(BaseModel):
 
         return self
 
-class OrderItem(BaseModel):
-    order_item_id: int
-    order_id: int
-    item_id: int
-    fulfillment_modality: FulfillmentModality
-    quantity: int
-    price_per_item: float
+    @model_validator(mode='after')
+    def validate_datetime(self) -> Self:
 
-    source_warehouse_id: Optional[int] = None
-    source_store_id: Optional[int] = None
-    dest_store_id: Optional[int] = None
-    dest_customer_address_id: Optional[int] = None
+        if not (self.time_of_order.hour != 0 or self.time_of_order.minute != 0 or self.time_of_order.second != 0):
+            raise ValueError("Time of order must contain time information.")
 
+        return self
 
 class Order(BaseModel):
     order_id: int
     customer_id: int
     time_of_order: datetime.datetime
     source: OrderSource
+    billing_address_id: int
     items: List[OrderItem]
 
 

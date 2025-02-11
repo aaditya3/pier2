@@ -84,7 +84,8 @@ def add_order(client, customer_id, customer_address_id, item_id):
     order_data = {
         'customer_id': customer_id,
         'time_of_order': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'source': OrderSource.online.value
+        'source': OrderSource.online.value,
+        'billing_address_id': customer_address_id
     }
     
     data = {
@@ -95,6 +96,7 @@ def add_order(client, customer_id, customer_address_id, item_id):
 
     resp = client.post(f'/orders', json = data)
     result = json.loads(resp.text)
+    print(result)
     print("Added order:", result['order_id'])
     return result['order_id']
 
@@ -131,23 +133,27 @@ def client_fixture(session: Session):
     app.dependency_overrides.clear()
 
 
-
-#FIXME: a function for printing / processing response may be nice.
 def test_add_customer(client: TestClient):
 
-    resp = client.get(f'/customers/1')
+    # Check empty db
+    resp = client.get(f'/customers/123456789')
     assert resp.status_code == 404
 
+    # Check incomplete data
     resp = client.post(f'/customers', json = {'email': "pink@floyd.com"})
     assert resp.status_code == 422
     result = json.loads(resp.text)
     print(f"** Recieved from server after post: {result}")
 
+    # Check bad email
     customer_data = {
         'email': "pinkfloyd.com",
         'first_name': "Pink",
         'last_name': "Floyd"
     }
+
+    # FIXME: Add check fo empty first and last name
+
     resp = client.post(f'/customers', json = customer_data)
     assert resp.status_code == 422, resp.content
     result = json.loads(resp.text)
@@ -170,10 +176,11 @@ def test_add_customer(client: TestClient):
 
 def test_add_customer_address(client: TestClient):
 
+    customer_id = add_customer(client)
 
     ## Customer address test
     customer_data = {
-        'customer_id': 35,
+        'customer_id': customer_id,
         'address_line_1': '34 Haight',
         'city': 'San Francisco',
         'state': 'CA',
@@ -221,7 +228,8 @@ def test_add_order(client: TestClient):
     order_data = {
         'customer_id': customer_id,
         'time_of_order': '2025-02-09 14:14:37',
-        'source': OrderSource.online.value
+        'source': OrderSource.online.value,
+        'billing_address_id': customer_address_id
     }
     
     data = {

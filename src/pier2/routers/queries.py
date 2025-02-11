@@ -14,7 +14,7 @@ router = APIRouter(prefix="/query", tags=["query"])
 
 
 @router.get("/order_history", response_model=List[Order])
-def get_store(email: str = None, phone: str = None, db: Session = Depends(get_db)):
+def get_order_history(email: str = None, phone: str = None, db: Session = Depends(get_db)):
 
     #FIXME: Move this to pydantic.
     if email and phone:
@@ -23,16 +23,16 @@ def get_store(email: str = None, phone: str = None, db: Session = Depends(get_db
     if not email and not phone:
         raise ValueError("At least one of phone number and email id must be provided. ")
 
-    customer_id = None
+    customer = None
     if email:
-        customer_id = db.query(Customers).filter(Customers.email == email).first().customer_id
+        customer = db.query(Customers).filter(Customers.email == email).first()
     else:
-        customer_id = db.query(Customers).filter(Customers.phone == phone).first().customer_id
+        customer = db.query(Customers).filter(Customers.phone == phone).first()
 
-    if not customer_id:
+    if not customer:
         raise HTTPException(status_code=404, detail=f"Customer not found with {f'Email {email}' if email else f'Phone: {phone}'}")
-
-    orders = db.query(Orders).filter(Orders.customer_id == customer_id).all()
+    
+    orders = db.query(Orders).filter(Orders.customer_id == customer.customer_id).order_by(Orders.time_of_order).all()
     return orders
 
 
@@ -60,7 +60,7 @@ def get_count_by_shipping_zip(db: Session = Depends(get_db)):
 
 
 @router.get("/instore_shoppers")
-def get_count_by_shipping_zip(top_k: int = 5, db: Session = Depends(get_db)):
+def get_instore_shoppers(top_k: int = 5, db: Session = Depends(get_db)):
     results = db.query(Orders.customer_id, func.count()).filter(Orders.source == OrderSource.store).group_by(
         Orders.customer_id).order_by(func.count().desc()).limit(top_k).all()
-    return [r.to_dict() for r in results]
+    return {r[0]: r[1] for r in results}

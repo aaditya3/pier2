@@ -9,6 +9,7 @@ import math
 import pandas as pd
 import random
 import copy
+from functools import wraps
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
@@ -23,7 +24,7 @@ from pier2.main import app
 IN_MEMORY_DB = "sqlite:///:memory:"
 FILE_DB = "sqlite:///./test.db"
 
-def select_db():
+def _select_db():
     return IN_MEMORY_DB
 
 def _print_json(data):
@@ -39,23 +40,44 @@ def _random_datetime(lookback_years = 2):
 
     return random_datetime
 
+def handle_response(id_key):
+    '''
+        Basic decorator to handle post errors.
+    '''
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            resp = func(*args, **kwargs)
+            if resp.status_code == 200:
+                return json.loads(resp.text)[id_key]
+            else:
+                raise ValueError(f"API Error: {resp.text}")
+        return wrapper
+    return decorator
+@handle_response("store_id")
 def add_store(client):
-    resp = client.post(f'/stores', json = {})
-    result = json.loads(resp.text)
-    #print("Added store:", result['store_id'])
-    return result['store_id']
+    return client.post(f'/stores', json = {})
 
+@handle_response("warehouse_id")
 def add_warehouse(client):
-    resp = client.post(f'/warehouses', json = {})
-    result = json.loads(resp.text)
-    #print("Added warehouse:", result['warehouse_id'])
-    return result['warehouse_id']
+    return client.post(f'/warehouses', json = {})
 
+@handle_response("item_id")
 def add_item(client):
-    resp = client.post(f'/items', json = {})
-    result = json.loads(resp.text)
-    # print("Added item:", result['item_id'])
-    return result['item_id']
+    return client.post(f'/items', json = {})
+
+@handle_response("customer_id")
+def add_customer(client, data):
+    return client.post(f'/customers', json = data)
+
+@handle_response("customer_address_id")
+def add_customer_address(client, data):
+    return client.post(f'/customers/addresses', json = data)
+
+@handle_response("order_id")
+def add_order(client, order, items):
+    data = {'items' : items, 'order': order}
+    return client.post(f'/orders', json = data)
 
 def get_customers_df(count):
 
@@ -176,26 +198,26 @@ def get_orders_df(
     return pd.DataFrame(orders), pd.DataFrame(order_items)
 
 def add_all(client, customers = None, customer_addresses = None, orders = None, order_items = None):
-    
+
     if (orders is not None and order_items is None) or (orders is None and order_items is not None):
         raise ValueError("Both orders and order_items must be provided or none.")
-    
-    
+
+
     if customers is not None:
         for index, row in customers.iterrows():
             add_customer(client, row.to_dict())
-    
+
     if customer_addresses is not None:
         for index, row in customer_addresses.iterrows():
             add_customer_address(client, row.to_dict())
-    
+
     if orders is not None:
         for index, row in orders.iterrows():
             order_id = row.order_id
             order_data = row.to_dict()
             items = []
             for index, r in order_items.query(f'order_id == {order_id}').iterrows():
-                
+
                 item_data = r.to_dict()
                 # Fix for pandas converting int's to nan's due to nulls allowed in the following
                 for k in ['source_warehouse_id', 'source_store_id', 'dest_store_id', 'dest_customer_address_id']:
@@ -205,52 +227,12 @@ def add_all(client, customers = None, customer_addresses = None, orders = None, 
                         else:
                             item_data[k] = int(item_data[k])
                 items.append(item_data)
-                        
+
             add_order(client, order_data, items)
-    
-
-def add_customer(client, data):
-    resp = client.post(f'/customers', json = data)
-    if resp.status_code == 200:
-        result = json.loads(resp.text)
-        # print("Added customer:", result['customer_id'])
-        return result['customer_id']
-    else:
-        print(resp.text)
-        raise ValueError(f"Could not add new customer. {json.loads(resp.text)}")
-
-
-def add_customer_address(client, data):
-    resp = client.post(f'/customers/addresses', json = data)
-    if resp.status_code == 200:
-        result = json.loads(resp.text)
-        # print("Added customer address:", result['customer_address_id'])
-        return result['customer_address_id']
-    else:
-        print(resp.text)
-        raise ValueError(f"Could not add new customer. {json.loads(resp.text)}")
-
-
-def add_order(client, order, items): 
-    
-    data = {
-        'items' : items,
-        'order': order
-    }
-
-    resp = client.post(f'/orders', json = data)
-    if resp.status_code == 200:
-        result = json.loads(resp.text)
-        # print("Added order:", result['order_id'])
-        return result['order_id']
-    else:
-        print(resp.text)
-        raise ValueError(f"Could not add new customer. {json.loads(resp.text)}")
-
 
 @pytest.fixture(name="session")
 def session_fixture():
-    which_db = select_db()
+    which_db = _select_db()
 
     engine = create_engine(
         which_db, connect_args={"check_same_thread": False}, poolclass = StaticPool
@@ -325,7 +307,7 @@ def test_add_customer(client: TestClient):
     assert resp.status_code == 422, resp.content
     result = json.loads(resp.text)
     print(f"** Recieved from server after post: {result}")
-    
+
     # Check bad last name
     customer_data = {
         'email': "pinkfloyd.com",
@@ -462,7 +444,7 @@ def test_order_history_query(client: TestClient):
 
     add_all(client, customers, customer_addresses, orders, order_items)
 
-    for index, row in customers.iterrows():    
+    for index, row in customers.iterrows():
         data = {'email': row['email']}
         customer_id = row['customer_id']
         resp = client.get(f'/query/order_history', params = data)
@@ -491,10 +473,10 @@ def test_group_by_billing_zip(client: TestClient, session: Session):
     assert resp.status_code == 200, resp.content
 
     # check against pandas result
-    all_orders = pd.read_sql( "SELECT * FROM orders", session.bind) 
-    all_customer_addresses = pd.read_sql( "SELECT * FROM customer_addresses", session.bind) 
-    pandas_result = all_orders.merge(all_customer_addresses, 
-                                     left_on = 'billing_address_id', 
+    all_orders = pd.read_sql( "SELECT * FROM orders", session.bind)
+    all_customer_addresses = pd.read_sql( "SELECT * FROM customer_addresses", session.bind)
+    pandas_result = all_orders.merge(all_customer_addresses,
+                                     left_on = 'billing_address_id',
                                      right_on = 'customer_address_id').groupby(
                                          'zip_code').size()
     assert pandas_result.to_dict() == result
@@ -517,13 +499,13 @@ def test_group_by_shipping_zip(client: TestClient, session: Session):
     assert resp.status_code == 200, resp.content
 
     # check against pandas result
-    customer_addresses = pd.read_sql( "SELECT * FROM customer_addresses", session.bind) 
-    
+    customer_addresses = pd.read_sql( "SELECT * FROM customer_addresses", session.bind)
+
     order_items_shipped_home = pd.read_sql(
-        "SELECT * FROM order_items", 
-        session.bind) 
-    pandas_result = order_items_shipped_home.merge(customer_addresses, 
-                                   left_on = 'dest_customer_address_id', 
+        "SELECT * FROM order_items",
+        session.bind)
+    pandas_result = order_items_shipped_home.merge(customer_addresses,
+                                   left_on = 'dest_customer_address_id',
                                    right_on = 'customer_address_id').groupby('zip_code')['order_id'].nunique()
     assert pandas_result.to_dict() == result
 
@@ -544,7 +526,7 @@ def test_instore_shoppers(client: TestClient, session: Session):
     assert resp.status_code == 200, resp.content
 
     # check against pandas result
-    orders = pd.read_sql( "SELECT * FROM orders", session.bind) 
+    orders = pd.read_sql( "SELECT * FROM orders", session.bind)
     pandas_result = orders[orders['source'] == 'store'].groupby('customer_id').size().reset_index(
         name = "count").sort_values("count", ascending=False).head(5)
 

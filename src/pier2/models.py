@@ -73,7 +73,6 @@ class OrderItems(Base):
     source_store_id = Column(Integer, ForeignKey('stores.store_id'))
     dest_store_id = Column(Integer, ForeignKey('stores.store_id'))
 
-    # FIXME: Below make sure to validate that the addresses is a is_shipping True or make it so.
     dest_customer_address_id = Column(Integer, ForeignKey('customer_addresses.customer_address_id'))
 
     order = relationship("Orders", back_populates="items")

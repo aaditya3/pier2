@@ -16,7 +16,6 @@ router = APIRouter(prefix="/query", tags=["query"])
 @router.get("/order_history", response_model=List[Order])
 def get_order_history(email: str = None, phone: str = None, db: Session = Depends(get_db)):
 
-    #FIXME: Move this to pydantic.
     if email and phone:
         raise ValueError("Both phone number and email id cannot be provided. ")
 

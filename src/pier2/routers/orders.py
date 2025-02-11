@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from ..database import get_db
+from ..database import get_db, transactional
 from ..models import Orders, OrderItems, CustomerAddresess, FulfillmentModality
 from ..schemas import NewOrder, NewOrderItem, Order, OrderItem
 
@@ -14,6 +14,7 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 
 # FIXME: Consider optimization this function. It's doing a lot of (possibly inneficient) queries.
 @router.post("/", response_model=Order)
+@transactional
 def add_order(order: NewOrder, items: List[NewOrderItem], db: Session = Depends(get_db)):
     db_order = Orders(**order.dict())
     items = [OrderItems(**item.dict()) for item in items]
@@ -43,7 +44,7 @@ def add_order(order: NewOrder, items: List[NewOrderItem], db: Session = Depends(
         raise HTTPException(status_code=422,
                             detail = "Some shipping addresses are not marked as is_shipping. ")
 
-    db.commit()
+    db.flush()
     db.refresh(db_order)
 
     for item in items:
@@ -52,6 +53,7 @@ def add_order(order: NewOrder, items: List[NewOrderItem], db: Session = Depends(
     return db_order
 
 @router.get("/{order_id}", response_model=Order)
+@transactional
 def get_customer(order_id: int, db: Session = Depends(get_db)):
     order = db.query(Orders).filter(Orders.order_id == order_id).first()
     if not order:

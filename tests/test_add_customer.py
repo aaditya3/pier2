@@ -54,6 +54,7 @@ def handle_response(id_key):
                 raise ValueError(f"API Error: {resp.text}")
         return wrapper
     return decorator
+
 @handle_response("store_id")
 def add_store(client):
     return client.post(f'/stores', json = {})
@@ -379,27 +380,36 @@ def test_add_customer_address(client: TestClient):
     result = json.loads(resp.text)
     print(f"** Recieved from server after create: {resp.status_code}")
 
+    # Bad state
+    customer_data['state'] = "foo"
+    resp = client.post(f'/customers/addresses', json = customer_data)
+    assert resp.status_code == 422, resp.content
+    result = json.loads(resp.text)
+    print(f"** Recieved from server after post: {resp.status_code}")
 
 def test_add_order(client: TestClient):
     store_id = add_store(client)
     warehouse_id = add_warehouse(client)
     item_id = add_item(client)
-    data = {
+
+    customer_data = {
         "email": "pink@floyd.com",
         "first_name": "Pink",
         "last_name": "Floyd",
         "phone": "111-222-4444"
     }
-    customer_id = add_customer(client, data)
-    data = {
+    customer_id = add_customer(client, customer_data)
+
+    address_data = {
         'customer_id': customer_id,
         'address_line_1': '34 Haight',
         'city': 'San Francisco',
         'state': 'CA',
         'zip_code': "94131",
-        'is_billing': True
+        'is_billing': True,
+        'is_shipping': True
     }
-    customer_address_id = add_customer_address(client, data)
+    customer_address_id = add_customer_address(client, address_data)
 
     items = [
         {'item_id': item_id,
@@ -418,15 +428,50 @@ def test_add_order(client: TestClient):
         'billing_address_id': customer_address_id
     }
 
-    data = {
-        'items' : items,
-        'order': order_data
-    }
-
-    resp = client.post(f'/orders', json = data)
+    resp = client.post(f'/orders', json = {'items' : items, 'order': order_data})
     assert resp.status_code == 200, resp.content
     result = json.loads(resp.text)
     print(f"** Recieved from server after post: {resp.status_code}")
+
+    # Test make billing a non-billing address
+    address_data['is_billing'] = False
+    address_data['is_shipping'] = True
+    customer_address_id = add_customer_address(client, address_data)
+    order_data['billing_address_id'] = customer_address_id
+    resp = client.post(f'/orders', json = {'items' : items, 'order': order_data})
+    assert resp.status_code == 422, resp.content
+    result = json.loads(resp.text)
+    print(f"** Recieved from server after post: {resp.status_code}")
+
+    # Test make shipping a non-shipping address
+    address_data['is_billing'] = True
+    address_data['is_shipping'] = False
+    customer_address_id = add_customer_address(client, address_data)
+    order_data['billing_address_id'] = customer_address_id
+    for i in range(len(items)):
+        if items[i]['dest_customer_address_id']:
+            items[i]['dest_customer_address_id'] = customer_address_id
+    resp = client.post(f'/orders', json = {'items' : items, 'order': order_data})
+    assert resp.status_code == 422, resp.content
+    result = json.loads(resp.text)
+    print(f"** Recieved from server after post: {resp.status_code}")
+
+    # Test fulfilment modalities
+    # FIXME: Check all cases, beyond the scope of this exercise.
+    items = [
+        {'item_id': item_id,
+            'fulfillment_modality': FulfillmentModality.store_to_home.value,
+            'quantity': 3,
+            'price_per_item': 3.2,
+            'source_store_id': store_id,
+            # 'dest_customer_address_id': customer_address_id
+        }
+    ]
+    resp = client.post(f'/orders', json = {'items' : items, 'order': order_data})
+    assert resp.status_code == 422, resp.content
+    result = json.loads(resp.text)
+    print(f"** Recieved from server after post: {resp.status_code}")
+
 
 def test_order_history_query(client: TestClient):
     customers = get_customers_df(2)

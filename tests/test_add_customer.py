@@ -118,7 +118,6 @@ def get_customer_addresses_df(customer_ids, min_addresses = 1, max_addresses = 8
         cd['is_shipping'] = True
         data.append(cd)
 
-
         for i in range(num_addresses - 1):
 
             cd = copy.deepcopy(customer_data)
@@ -198,10 +197,8 @@ def get_orders_df(
     return pd.DataFrame(orders), pd.DataFrame(order_items)
 
 def add_all(client, customers = None, customer_addresses = None, orders = None, order_items = None):
-
     if (orders is not None and order_items is None) or (orders is None and order_items is not None):
         raise ValueError("Both orders and order_items must be provided or none.")
-
 
     if customers is not None:
         for index, row in customers.iterrows():
@@ -273,7 +270,6 @@ def test_neg_create_order_non_billing_address():
     # FIXME
     pass
 
-
 def test_add_customer(client: TestClient):
 
     # Negative test
@@ -295,7 +291,7 @@ def test_add_customer(client: TestClient):
     resp = client.post(f'/customers', json = customer_data)
     assert resp.status_code == 422, resp.content
     result = json.loads(resp.text)
-    print(f"** Recieved from server after post: {result}")
+    print(f"** Recieved from server after post: {resp.status_code}")
 
     # Check bad first name
     customer_data = {
@@ -306,7 +302,7 @@ def test_add_customer(client: TestClient):
     resp = client.post(f'/customers', json = customer_data)
     assert resp.status_code == 422, resp.content
     result = json.loads(resp.text)
-    print(f"** Recieved from server after post: {result}")
+    print(f"** Recieved from server after post: {resp.status_code}")
 
     # Check bad last name
     customer_data = {
@@ -317,7 +313,7 @@ def test_add_customer(client: TestClient):
     resp = client.post(f'/customers', json = customer_data)
     assert resp.status_code == 422, resp.content
     result = json.loads(resp.text)
-    print(f"** Recieved from server after post: {result}")
+    print(f"** Recieved from server after post: {resp.status_code}")
 
     # Check bad phone
     customer_data = {
@@ -329,7 +325,7 @@ def test_add_customer(client: TestClient):
     resp = client.post(f'/customers', json = customer_data)
     assert resp.status_code == 422, resp.content
     result = json.loads(resp.text)
-    print(f"** Recieved from server after post: {result}")
+    print(f"** Recieved from server after post: {resp.status_code}")
 
     customer_data = {
         "email": "pink@floyd.com",
@@ -340,12 +336,12 @@ def test_add_customer(client: TestClient):
     resp = client.post(f'/customers', json = customer_data)
     assert resp.status_code == 200, resp.content
     result = json.loads(resp.text)
-    print(f"** Recieved from server after post: {result}")
+    print(f"** Recieved from server after post: {resp.status_code}")
 
     resp = client.get(f'/customers/{result['customer_id']}')
     assert resp.status_code == 200
     result = json.loads(resp.text)
-    print(f"** Recieved from server after create: {result}")
+    print(f"** Recieved from server after create: {resp.status_code}")
 
 def test_add_customer_address(client: TestClient):
     data = {
@@ -369,25 +365,24 @@ def test_add_customer_address(client: TestClient):
     resp = client.post(f'/customers/addresses', json = customer_data)
     assert resp.status_code == 422, resp.content
     result = json.loads(resp.text)
-    print(f"** Recieved from server after post: {result}")
+    print(f"** Recieved from server after post: {resp.status_code}")
 
 
     customer_data['is_billing'] = True
     resp = client.post(f'/customers/addresses', json = customer_data)
     assert resp.status_code == 200, resp.content
     result = json.loads(resp.text)
-    print(f"** Recieved from server after post: {result}")
+    print(f"** Recieved from server after post: {resp.status_code}")
 
     resp = client.get(f'/customers/addresses/{result['customer_address_id']}')
     assert resp.status_code == 200
     result = json.loads(resp.text)
-    print(f"** Recieved from server after create: {result}")
+    print(f"** Recieved from server after create: {resp.status_code}")
 
 
 def test_add_order(client: TestClient):
-
-    add_store(client)
-    add_warehouse(client)
+    store_id = add_store(client)
+    warehouse_id = add_warehouse(client)
     item_id = add_item(client)
     data = {
         "email": "pink@floyd.com",
@@ -411,7 +406,7 @@ def test_add_order(client: TestClient):
             'fulfillment_modality': FulfillmentModality.store_to_home.value,
             'quantity': 3,
             'price_per_item': 3.2,
-            'source_store_id': 1,
+            'source_store_id': store_id,
             'dest_customer_address_id': customer_address_id
         }
     ]
@@ -431,10 +426,9 @@ def test_add_order(client: TestClient):
     resp = client.post(f'/orders', json = data)
     assert resp.status_code == 200, resp.content
     result = json.loads(resp.text)
-    print(f"** Recieved from server after post: {result}")
+    print(f"** Recieved from server after post: {resp.status_code}")
 
 def test_order_history_query(client: TestClient):
-
     customers = get_customers_df(2)
     customer_addresses = get_customer_addresses_df(list(customers.customer_id))
     item_ids = [add_item(client) for i in range(1, 101)]
@@ -455,8 +449,6 @@ def test_order_history_query(client: TestClient):
         pandas_orders = set(orders.merge(customers.query(f'customer_id == {customer_id}'))['order_id'])
         response_orders = set(pd.DataFrame(result)['order_id'])
         assert pandas_orders == response_orders, f"Pandas result: {pandas_orders}, response result: {response_orders}"
-
-
 
 def test_group_by_billing_zip(client: TestClient, session: Session):
     customers = get_customers_df(3)
@@ -480,8 +472,6 @@ def test_group_by_billing_zip(client: TestClient, session: Session):
                                      right_on = 'customer_address_id').groupby(
                                          'zip_code').size()
     assert pandas_result.to_dict() == result
-
-
 
 def test_group_by_shipping_zip(client: TestClient, session: Session):
     customers = get_customers_df(3)
@@ -508,7 +498,6 @@ def test_group_by_shipping_zip(client: TestClient, session: Session):
                                    left_on = 'dest_customer_address_id',
                                    right_on = 'customer_address_id').groupby('zip_code')['order_id'].nunique()
     assert pandas_result.to_dict() == result
-
 
 def test_instore_shoppers(client: TestClient, session: Session):
     customers = get_customers_df(10)

@@ -14,6 +14,7 @@ Because Pier 1 was taken already.
   - It goes without saying that MySQL or Postgres (or any other production grade RDBMS system) would be obvious first choices.
 - The logging system needs to be adjusted and spruced up. I have not done that.
 - A linter should be run.
+- There is inconsistent usage of single quotes and double quotes. 
 
 There is no CLI/script but there is a test suite that generates random orders, addresses, customers etc. populates the database and then runs the queries requested. The results of these queries are then compared against pure pandas queries that impoersonate those through SQL to check and validate the results.
 

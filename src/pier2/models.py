@@ -43,7 +43,6 @@ class CustomerAddresess(Base):
     customer = relationship("Customers", back_populates="addresses")
 
 
-
 class Orders(Base):
     __tablename__ = "orders"
 

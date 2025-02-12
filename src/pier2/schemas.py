@@ -5,7 +5,6 @@ import re
 from .models import FulfillmentModality, OrderSource
 import datetime
 
-
 states = [
     "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
     "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
@@ -46,7 +45,6 @@ def validate_name(name: str) -> str:
     if len(name.strip()) == 0:
         raise ValueError(f"Invalid name as it was empty.")
     return name
-
 
 # FIXME: Obviously need to check zipcode beyond just format.
 def validate_zip(zip: str) -> str:
@@ -109,17 +107,22 @@ class NewCustomerAddress(BaseModel):
 class NewStore(BaseModel):
     pass
 
+
 class NewWarehouse(BaseModel):
     pass
+
 
 class NewItem(BaseModel):
     pass
 
+
 class Store(BaseModel):
     store_id: int
 
+
 class Warehouse(BaseModel):
     warehouse_id: int
+
 
 class Item(BaseModel):
     item_id: int
@@ -229,6 +232,7 @@ class NewOrder(BaseModel):
             raise ValueError("Time of order must contain time information.")
 
         return self
+
 
 class Order(BaseModel):
     order_id: int

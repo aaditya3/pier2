@@ -6,11 +6,8 @@ from ..database import get_db, transactional
 from ..models import Orders, OrderItems, CustomerAddresess, FulfillmentModality
 from ..schemas import NewOrder, NewOrderItem, Order, OrderItem
 
-
 logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/orders", tags=["orders"])
-
 
 # FIXME: Consider optimization this function. It's doing a lot of (possibly inneficient) queries.
 @router.post("/", response_model=Order)

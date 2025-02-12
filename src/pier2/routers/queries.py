@@ -7,11 +7,8 @@ from ..database import get_db
 from ..models import Customers, CustomerAddresess, OrderItems, Orders, FulfillmentModality, OrderSource
 from ..schemas import Order
 
-
 logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/query", tags=["query"])
-
 
 @router.get("/order_history", response_model=List[Order])
 def get_order_history(email: str = None, phone: str = None, db: Session = Depends(get_db)):
@@ -34,7 +31,6 @@ def get_order_history(email: str = None, phone: str = None, db: Session = Depend
     orders = db.query(Orders).filter(Orders.customer_id == customer.customer_id).order_by(Orders.time_of_order).all()
     return orders
 
-
 @router.get("/count_billing_orders")
 def get_count_billing_orders(db: Session = Depends(get_db)):
 
@@ -42,8 +38,6 @@ def get_count_billing_orders(db: Session = Depends(get_db)):
         Orders, Orders.billing_address_id == CustomerAddresess.customer_address_id).group_by(
             CustomerAddresess.zip_code).order_by(func.count().desc()).all()
     return {r[0]: r[1] for r in results}
-
-
 
 @router.get("/count_by_shipping_zip")
 def get_count_by_shipping_zip(db: Session = Depends(get_db)):
@@ -56,7 +50,6 @@ def get_count_by_shipping_zip(db: Session = Depends(get_db)):
                 CustomerAddresess.zip_code).order_by(func.count(distinct(OrderItems.order_id)).desc()).all()
 
     return {r[0]: r[1] for r in results}
-
 
 @router.get("/instore_shoppers")
 def get_instore_shoppers(top_k: int = 5, db: Session = Depends(get_db)):

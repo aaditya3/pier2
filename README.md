@@ -10,9 +10,10 @@ Because Pier 1 was taken already.
 - The code is overly verbose in some areas (especially in the test suite) but also in some parts of the codebase. A few attempts have been made to use decorators and util functions to clean it up but more needs to be done.
 - I am obviously not happy with some parts of the codebase but given the time/effort trade-off, this is the current state.
 - You will see some FIXME comments through the code.
-- The tests use an in memory SQLite DB by default and the run command below uses the `config.yaml` file which creates a file based SQLite DB. 
+- The tests use an in memory SQLite DB by default and the `run_server.sh` command below uses the `config.yaml` file which creates a file based SQLite DB. 
   - It goes without saying that MySQL or Postgres (or any other production grade RDBMS system) would be obvious first choices.
 
+There is no CLI/script but there is a test suite that generates random orders, addresses, customers etc. populates the database and then runs the queries requested. The results of these queries are then compared against pure pandas queries that impoersonate those through SQL to check and validate the results.
 
 
 ## Software Requirements
@@ -34,7 +35,7 @@ poetry install
 
 ## To Run The Tests
 
-This is a bit hacky for now as we have not packaged the pier2 codebase. From the root directory of the github project you can inspect the `run_tests.sh` file. 
+This is a bit hacky for now as we have not packaged the pier2 codebase. From the root directory of the github project you can run and/or inspect the `run_tests.sh` file. 
 
 ```
 export PYTHONPATH="$PYTHONPATH:./src/"; poetry run pytest -s tests
@@ -43,17 +44,15 @@ export PYTHONPATH="$PYTHONPATH:./src/"; poetry run pytest -s tests
 ## To Run The Service
 
 ```
-$> ./run.sh
+$> ./run_server.sh
 
 ```
-The run.sh file has the following command:
+The `run_server.sh` file has the following command:
 ```
 poetry run uvicorn src.pier2.main:app --reload
 ```
 
-
 The service will be launched at: http://127.0.0.1:8000
 
 - It uses Fast API which has built in swagger documentation at http://127.0.0.1:8000/docs
-
-## To run 
+- It would be possible to use the swagger interface to run some get and post commands.

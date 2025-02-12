@@ -375,7 +375,7 @@ def test_add_customer_address(client: TestClient):
     result = json.loads(resp.text)
     print(f"** Recieved from server after post: {resp.status_code}")
 
-    resp = client.get(f'/customers/addresses/{result['customer_address_id']}')
+    resp = client.get(f'/customers/addresses/{result["customer_address_id"]}')
     assert resp.status_code == 200
     result = json.loads(resp.text)
     print(f"** Recieved from server after create: {resp.status_code}")
